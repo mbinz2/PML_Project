@@ -1,0 +1,77 @@
+---
+title: "PML_CourseProject"
+author: "Mike B"
+date: "12/28/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret);library(ggplot2);library(dplyr);library(randomForest);library(rpart)
+```
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+Data is already provided in a test and training set.
+```{r data}
+#Downloads only used one-time to get dataset
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","training.csv")
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","test.csv")
+train_begin <- read.csv("training.csv")
+test_begin <- read.csv("test.csv")
+```
+However, there are a significant number of extraneous variables with na values.  To eliminate these items that will not have any predictive power, I removed all columns that were na in the test set provided.  I also removed the first seven variables of data set because they appeared to be user details, and I would not anticipate them having predictive power.  The list of columns below are all the fields that will be used in the modeling.
+```{r clean}
+colstouse <- !colSums(is.na(test_begin))
+colstouse[1:7] <- FALSE
+names(colstouse)[colstouse==TRUE]
+```
+In order to ensure the model is applicable at the end, I filter both the test and training set to include only the columns identified above.
+```{r prepare}
+training <- train_begin[,colstouse==TRUE]
+test <- test_begin[,colstouse==TRUE]
+```
+In lieu of modeling with comprehensive cross-validation techniques, the last step I have taken with the data before modeling it is to split the training set into a set that I will train on and a set that I will validate on.
+```{r validate}
+set.seed(1021)
+training_use <- createDataPartition(y=training$classe,p=.7,list=FALSE)
+train <- training[training_use,]
+validate <- training[-training_use,]
+```
+
+## Model Building
+After clearing out unncessary variables and splitting the training set so that I will be able to validate it's accuracy, I decided to run two different models on the train set identified above.
+### 1) Decision Tree 
+```{r tree}
+set.seed(5)
+
+fitTree <- rpart(classe~.,data=train,method="class")
+predTree <- predict(fitTree,newdata=validate,type="class")
+cmT <- confusionMatrix(predTree,validate$classe)
+cmT$table
+#Accuracy
+cmT$overall[[1]]
+#Out of Sample Error Estimate
+1-cmT$overall[[1]]
+```
+### 2) Random Forest
+```{r forest}
+fitRF <-randomForest(classe ~ .,data=train)
+predRF <- predict(fitRF,newdata=validate)
+cmRF <- confusionMatrix(predRF,validate$classe)
+cmRF$table
+#Accuracy
+cmRF$overall[[1]]
+#Out of Sample Error Estimate
+1-cmRF$overall[[1]]
+```
+The accuracy of the tree was ok at 73.9%, but the random forest was much stronger at 99.5%.  Initially, my intention was to combine the models and attempt to improve the prediction further, but the random forest proved so accurate in the validation step that I will just use that for the prediction.
+
+## Predicting Test Set
+```{r prediction}
+test_classe <- predict(fitRF,newdata=test)
+test_classe
+```
+
